@@ -1,0 +1,140 @@
+
+---
+title: 'Capstone Project: Exploratory Data Analysis'
+output: slidy_presentation
+               
+---
+
+## The Report overwiew 
+
+This is an intermediate report of exploratory analysis of the course data. It demonstrates
+the following processes:
+
+- Getting and cleaning data 
+- Creating data samples and building a corpora
+- Creating n-gram tokenizers and noting word frequencies
+
+## Getting and cleaning data 
+
+```{r, cache=TRUE}
+
+library(stringi)
+# download and unzip source data
+ swift_data <-  "https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip"
+ download.file(swift_data, "SwiftKey.zip" )
+ SwiftKey <- unzip("SwiftKey.zip")
+# Verify the files exist 
+  list.files("final/en_US")
+# Import data into R datasets
+```
+```{r,cache=TRUE}
+   blogs <- readLines("final/en_US/en_US.blogs.txt", encoding="UTF-8")
+   tweets <- readLines("final/en_US/en_US.twitter.txt", encoding="UTF-8")
+   con <- file("final/en_US/en_US.news.txt", open="rb")
+   news <- readLines(con, encoding="UTF-8")
+   rm(con)
+save(blogs, file="blogs.RData")
+save(news, file="news.RData")
+save(tweets, file="tweets.RData")
+# Examine the data files
+library(stringi)
+# Get file size in megabytes
+file.info("final/en_US/en_US.blogs.txt")$size   / 1024^2
+file.info("final/en_US/en_US.news.txt")$size    / 1024^2
+file.info("final/en_US/en_US.twitter.txt")$size / 1024^2
+# Load data into RData objects.
+load("blogs.RData")
+load("news.RData")
+load("tweets.RData")
+length(blogs)
+length(news)
+length(tweets)
+# Textual analysis and summaries
+blogsWords   <- stri_count_words(blogs)
+newsWords    <- stri_count_words(news)
+tweetsWords <- stri_count_words(tweets)
+summary(blogsWords)
+summary(newsWords)
+summary(tweetsWords)
+```
+## Creating data samples and constructing a single corpus
+
+```{r,cache=TRUE}
+library(RWeka)
+library(tm)
+library(magrittr)
+library(dplyr)
+library(stringi)
+blogsSample <- sample(blogs, 500) 
+newsSample <- sample(news, 500)
+tweetsSample <- sample(tweets,500)
+save(blogsSample, newsSample, tweetsSample, file = "SampleData")
+v_blogs <-
+  blogsSample %>%
+  data.frame() %>%
+  DataframeSource() %>%
+  VCorpus %>%
+  tm_map( stripWhitespace )
+v_news <-
+  newsSample %>%
+  data.frame() %>%
+  DataframeSource() %>%
+  VCorpus %>%
+  tm_map( stripWhitespace )
+v_tweets <-
+  tweetsSample %>%
+  data.frame() %>%
+  DataframeSource() %>%
+  VCorpus %>%
+  tm_map( stripWhitespace )
+
+v_all <- c(v_blogs, v_news, v_tweets)
+class(v_all)
+```
+## Generating n-gram tokens and checking frequencies 
+
+```{r,cache=TRUE}
+  unigram_token <- function(x) NGramTokenizer(x, Weka_control(min = 1, max = 1))
+  bigram_token  <- function(x) NGramTokenizer(x, Weka_control(min = 2, max = 2))
+  trigram_token <- function(x) NGramTokenizer(x, Weka_control(min = 3, max = 3))
+# unigrams
+options(mc.cores=1)
+ v_unigram <- TermDocumentMatrix(v_all, control=list(tokenize= unigram_token))
+ v_unigram <- removeSparseTerms(v_unigram,0.9998)
+ findFreqTerms(v_unigram, lowfreq= 100)
+ freqUnigram <- rowSums(as.matrix(v_unigram))
+ freqUnigram <- subset(freqUnigram, freqUnigram >= 100)
+# bigrams
+options(mc.cores=1)
+ v_bigram <-  TermDocumentMatrix(v_all, control=list(tokenize= bigram_token))
+ v_bigram <- removeSparseTerms(v_bigram, 0.9998)
+ findFreqTerms(v_bigram, lowfreq=25)
+ freqBigram <- rowSums(as.matrix(v_bigram))
+ freqBigram <- subset(freqBigram, freqBigram >= 25)
+# trigrams
+options(mc.cores=1)
+v_trigram <- TermDocumentMatrix(v_all, control=list(tokenize= trigram_token))
+v_trigram <- removeSparseTerms(v_trigram, 0.9998)
+findFreqTerms(v_trigram, lowfreq = 5)
+freqTrigram <- rowSums(as.matrix(v_trigram))
+freqTrigram <- subset(freqTrigram, freqTrigram >= 5)
+```
+
+## Re inspecting data samples by graphical visualization 
+
+```{r,cache=TRUE}
+library(ggplot2)
+qplot(freqUnigram, geom= "dotplot", main = "unigrams", colour= I("red"))
+qplot(freqBigram,  geom= "dotplot", main = "bigrams",  colour= I("blue"))
+qplot(freqTrigram, geom= "dotplot", main = "trigrams", colour= I("green"))
+```
+
+## Next Steps - predictive analytics modeling
+
+At this point, we have a fairly good understanding of the 3 data sources. 
+The ngram-tokenizers and their word frequencies seem reasonable for the next step
+of predictive analytical modeling. That will involve applying statistical model fitting or
+machine learing algorithms to the corpora created in this report. 
+The final goal will be to deploy the predictive model as an interactive Shiny App.
+The Shiny App will predict 3,2 or 1 probable desired word output in response to
+the users' input. 
