@@ -1,0 +1,221 @@
+---
+title: 'Capstone Project: Exploratory Data Analysis'
+output: slidy_presentation 
+incremental: true 
+---
+
+### The Report overwiew   
+
+This is an intermediate report of exploratory analysis of the course data. It describes 
+the process of :
+
+-     1. Getting and cleaning data. 
+-     2. Creating data samples and building a corpora.
+-     3. Creating n-gram tokenizers and noting word frequencies.
+-     4. A brief statement of Next steps to follow.
+
+Each descriptive section is followed by a code slide.  The reader my scroll through the code
+or skip it by a single mouse click and move to the next section.
+
+
+###  1. Getting and cleaning data  {.smaller}
+
+ In this section we perform the following tasks :
+ 
+-  download and unzip source data.
+-  verify the unloaded/unzipped file has been created on the local machine.
+-  import the data into R readable files one for each, news, blogs and tweeter data. 
+-  take a series of steps to 'get to know' our data which is in R readable files now.
+-  look at the individual file sizes in megabytes.
+-  count the words in each file.
+-  print out the summary statistics of each data file. 
+ 
+ We conclude this section with the observation that:
+
+     news, blogs and twitter data requires 548.0 MB of storage of which 
+     blogs take up 200.4242 MB, news take up 196.2775 MB and twitter data
+     take up, 159.3641 MB.
+
+     There are 899288 blogs, 1010242 news, 2360148 tweets in our source data.
+
+     The summary statistics show that number of word range from 0 to 6726
+     in a blog,1 to 1796 in a news and 1 to 60 in a tweet.
+
+
+### Code Slide 1 {.smaller}
+
+
+```{r, eval=FALSE}
+
+library(stringi)
+ 
+ swift_data <-  "https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip"
+ download.file(swift_data, "SwiftKey.zip" )
+ SwiftKey <- unzip("SwiftKey.zip")
+ 
+  list.files("final/en_US")
+ 
+   blogs <- readLines("final/en_US/en_US.blogs.txt", encoding="ASCII")
+   tweets <- readLines("final/en_US/en_US.twitter.txt", encoding="ASCII")
+   con <- file("final/en_US/en_US.news.txt", open="rb")
+   news <- readLines(con, encoding="ASCII")
+   close(con)
+
+save(blogs, file="blogs.RData")
+save(news, file="news.RData")
+save(tweets, file="tweets.RData")
+```
+```{r}
+library(stringi)
+# Get file size in megabytes
+file.info("final/en_US/en_US.blogs.txt")$size   / 1024^2
+file.info("final/en_US/en_US.news.txt")$size    / 1024^2
+file.info("final/en_US/en_US.twitter.txt")$size / 1024^2
+# Load data into RData objects.
+load("blogs.RData")
+load("news.RData")
+load("tweets.RData")
+length(blogs)
+length(news)
+length(tweets)
+# Textual analysis and summaries
+blogsWords   <- stri_count_words(blogs)
+newsWords    <- stri_count_words(news)
+tweetsWords <- stri_count_words(tweets)
+summary(blogsWords)
+summary(newsWords)
+summary(tweetsWords)
+```
+
+
+### 2. Creating data samples and building a corpora {.smaller}
+
+In this section we select samples of source data for textual analysis.
+We start with creating our samples and transforming them into working corpus.
+We conclude this section with the observation that:
+
+       we have an integrated corpus, v_all, that includes data from
+       all three sources, blogs, news and twitter.
+       Our data has been transformed into a single virtual corpora that 
+       can be tokenized to generate semantic terms (ngram-tokens) for
+       predictive analytic modeling. 
+
+
+### Code Slide 2 {.smaller} 
+
+
+```{r}
+library(RWeka)
+library(tm)
+library(magrittr)
+library(dplyr)
+library(stringi)
+library(ggplot2)
+
+blogsSample <- sample(blogs, 500) 
+newsSample <- sample(news, 500)
+tweetsSample <- sample(tweets,500)
+save(blogsSample, newsSample, tweetsSample, file = "SampleData")
+
+v_blogs <-
+  blogsSample %>%
+  data.frame() %>%
+  DataframeSource() %>%
+  VCorpus 
+v_news <-
+  newsSample %>%
+  data.frame() %>%
+  DataframeSource() %>%
+  VCorpus  
+v_tweets <-
+  tweetsSample %>%
+  data.frame() %>%
+  DataframeSource() %>%
+  VCorpus 
+v_all <- c(v_blogs, v_news, v_tweets)
+  v_all <- tm_map(v_all, stripWhitespace ) 
+  v_all <- tm_map(v_all, removePunctuation )
+  v_all <- tm_map(v_all, removeNumbers) 
+  v_all <- tm_map(v_all, tolower) 
+  v_all <- tm_map(v_all, PlainTextDocument)
+
+class(v_all)         
+```
+
+
+### 3. Creating n-gram tokenizers and noting word frequencies {.smaller}
+
+In this section we are generating our semantic terms, single words, 2 and 3 term phrases. 
+We are also checking how frequently these terms appear in our corpus. Due to the large amount
+of data, we choose to save work space and remove the sparse terms from our corpus.
+
+        A NOT-SO-SURPRISING finding here is that the word, 'the', is the most
+        frequently spoken english language word. It has the highest frequency 
+        as a single term and as 1st, 2nd or 3rd term of the 2 or 3 word phrases
+        in our corpora.
+        
+        We conclude this section by visually inspecting our findings as plots in 
+        the next Code Slide.
+     
+  
+### Code Slide 3 {.smaller}
+
+```{r}
+library(RWeka)
+library(tm)
+library(magrittr)
+library(dplyr)
+library(stringi)
+library("ggplot2")
+
+  unigram_token <- function(x) NGramTokenizer(x, Weka_control(min = 1, max = 1))
+  bigram_token  <- function(x) NGramTokenizer(x, Weka_control(min = 2, max = 2))
+  trigram_token <- function(x) NGramTokenizer(x, Weka_control(min = 3, max = 3)) 
+options(mc.cores=1)
+ v_unigram <- TermDocumentMatrix(v_all, control=list(tokenize= unigram_token))
+ v_unigram <- removeSparseTerms(v_unigram,0.9998)
+freq_unigram <- sort(rowSums(as.matrix(v_unigram)), decreasing = TRUE)
+freq_unigram_df <- data.frame(word = names(freq_unigram), frequency = freq_unigram )
+# Visually inspecting the data in plots
+freq_unigram_df %>%
+  filter(frequency >= 200) %>%
+  ggplot(aes(reorder(word, -frequency), frequency)) +
+  geom_bar(stat = "identity") + guides(fill=FALSE) +
+  ggtitle("Unigrams with frequency of 2000 or higher ") +
+  xlab("Unigrams") + ylab("Frequency") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1 ))
+options(mc.cores=1)
+ v_bigram <-  TermDocumentMatrix(v_all, control=list(tokenize= bigram_token))
+ v_bigram <- removeSparseTerms(v_bigram, 0.9998) 
+freq_bigram <- sort( rowSums(as.matrix(v_bigram)))
+freq_bigram_df <- data.frame(word = names(freq_bigram), frequency = freq_bigram)
+# Visually inspecting the data in plots   
+  freq_bigram_df %>%
+  filter(frequency > 50 ) %>%
+  ggplot(aes(reorder(word, -frequency), frequency)) +
+  geom_bar(stat = "identity") + guides(fill=FALSE) +
+  ggtitle("Bigrams with frequency higher than 50 ") +
+  xlab("Bigrams") + ylab("Frequncy") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+options(mc.cores=1)
+v_trigram <- TermDocumentMatrix(v_all, control=list(tokenize= trigram_token))
+v_trigram <- removeSparseTerms(v_trigram, 0.9998)
+freq_trigram <- sort(rowSums(as.matrix(v_trigram)))
+freq_trigram_df <- data.frame(word = names(freq_trigram), frequency = freq_trigram )
+# Visually inspecting the data in plots
+freq_trigram_df %>%
+  filter(frequency > 5) %>%
+  ggplot(aes(reorder(word, -frequency), frequency)) +
+  geom_bar(stat = "Identity") + guides(fill=FALSE) +
+  ggtitle("Trigrams with frequency higher than 5") +
+  xlab("Trigrams") + ylab("Frequency") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+###  4.  A brief statement of Next steps to follow   {.smaller}
+  
+The next step will involve applying statistical inference or machine learning algorithms to the corpora created in this report. The final goal will be to deploy the predictive model as an interactive Shiny App.
+The Shiny App will predict 3,2 or 1 desired word output in response to users' input.
+
+
